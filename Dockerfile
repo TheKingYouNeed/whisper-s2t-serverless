@@ -1,5 +1,5 @@
-# WhisperS2T Load Balancing Serverless Dockerfile for RunPod
-# Simplified version using PyPI package
+# WhisperS2T RunPod Serverless Dockerfile
+# Uses proper RunPod handler for queue-based serverless
 
 FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
@@ -14,28 +14,21 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install WhisperS2T from PyPI (more reliable than git install)
-RUN pip3 install --no-cache-dir whisper-s2t
-
-# Install FastAPI and dependencies for multipart upload support
+# Install WhisperS2T and RunPod SDK
 RUN pip3 install --no-cache-dir \
-    fastapi>=0.100.0 \
-    uvicorn[standard]>=0.23.0 \
-    python-multipart>=0.0.6
+    whisper-s2t \
+    runpod \
+    requests
 
-# Copy application code
-COPY src/app.py /app/app.py
+# Copy handler code
+COPY src/handler.py /app/handler.py
 
-# Environment variables - cost-effective settings
+# Environment variables
 ENV WHISPER_MODEL=large-v3
 ENV WHISPER_BACKEND=CTranslate2
-ENV PORT=8000
 
 # Pre-download model for faster cold starts
 RUN python3 -c "import whisper_s2t; model = whisper_s2t.load_model(model_identifier='large-v3', backend='CTranslate2'); print('Model loaded successfully')" || echo "Model will download on first request"
 
-# Expose port for Load Balancing
-EXPOSE 8000
-
-# Start FastAPI server
-CMD ["python3", "-u", "/app/app.py"]
+# Start RunPod serverless handler
+CMD ["python3", "-u", "/app/handler.py"]

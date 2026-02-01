@@ -1,12 +1,14 @@
 """
-WhisperS2T Serverless Handler for RunPod
-Uses CTranslate2 backend for fast, efficient transcription
+WhisperS2T RunPod Serverless Handler
+Supports both queue-based requests and HTTP proxy for RapidAPI
 """
 
 import os
 import tempfile
 import base64
 import requests
+from typing import Optional
+
 import runpod
 import whisper_s2t
 
@@ -17,124 +19,133 @@ def load_model():
     """Load WhisperS2T model with CTranslate2 backend"""
     global MODEL
     if MODEL is None:
-        model_id = os.getenv("WHISPER_MODEL", "large-v3")
+        model_size = os.getenv("WHISPER_MODEL", "large-v3")
         backend = os.getenv("WHISPER_BACKEND", "CTranslate2")
-        compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "float16")
         
-        print(f"Loading WhisperS2T model: {model_id} with backend: {backend}")
+        print(f"Loading WhisperS2T model: {model_size} with backend: {backend}")
         MODEL = whisper_s2t.load_model(
-            model_identifier=model_id,
+            model_identifier=model_size,
             backend=backend,
-            compute_type=compute_type
         )
         print("Model loaded successfully!")
     return MODEL
 
-def download_file(url: str, suffix: str = ".mp3") -> str:
-    """Download file from URL to temp location"""
-    response = requests.get(url, stream=True, timeout=300)
+
+def download_audio(audio_url: str) -> str:
+    """Download audio from URL to temp file"""
+    response = requests.get(audio_url, timeout=300)
     response.raise_for_status()
     
+    suffix = ".mp3"
+    if "wav" in audio_url.lower():
+        suffix = ".wav"
+    elif "m4a" in audio_url.lower():
+        suffix = ".m4a"
+    elif "flac" in audio_url.lower():
+        suffix = ".flac"
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        for chunk in response.iter_content(chunk_size=8192):
-            tmp.write(chunk)
+        tmp.write(response.content)
         return tmp.name
+
+
+def decode_base64_audio(audio_base64: str) -> str:
+    """Decode base64 audio to temp file"""
+    audio_data = base64.b64decode(audio_base64)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        tmp.write(audio_data)
+        return tmp.name
+
+
+def transcribe_audio(audio_path: str, language: Optional[str] = None, task: str = "transcribe", batch_size: int = 24):
+    """Transcribe audio file using WhisperS2T"""
+    model = load_model()
+    
+    out = model.transcribe_with_vad(
+        [audio_path],
+        lang_codes=[language] if language else [None],
+        tasks=[task],
+        initial_prompts=[None],
+        batch_size=batch_size,
+    )
+    
+    segments = out[0] if out else []
+    
+    result_segments = []
+    full_text_parts = []
+    
+    for seg in segments:
+        seg_data = {
+            "start": seg.get("start_time", 0),
+            "end": seg.get("end_time", 0),
+            "text": seg.get("text", "").strip(),
+        }
+        result_segments.append(seg_data)
+        full_text_parts.append(seg.get("text", "").strip())
+    
+    return {
+        "text": " ".join(full_text_parts),
+        "segments": result_segments,
+    }
+
 
 def handler(job):
     """
-    RunPod serverless handler for WhisperS2T transcription
+    RunPod Serverless Handler
     
-    Input job format:
-    {
-        "input": {
-            "audio_url": "https://example.com/audio.mp3",  # URL to audio file
-            OR
-            "audio_base64": "base64_encoded_audio_data",   # Base64 encoded audio
-            
-            "language": "en",              # Optional: language code
-            "task": "transcribe",          # Optional: "transcribe" or "translate"
-            "batch_size": 16,              # Optional: batch size for processing
-            "return_timestamps": false     # Optional: include word timestamps
-        }
-    }
+    Accepts:
+        - audio: URL to audio file
+        - audio_base64: Base64 encoded audio (alternative to URL)
+        - language: Optional language code
+        - task: 'transcribe' or 'translate'
+        - batch_size: Batch size for processing
     """
     job_input = job.get("input", {})
     
-    # Get audio source
-    audio_url = job_input.get("audio_url")
+    audio_url = job_input.get("audio")
     audio_base64 = job_input.get("audio_base64")
-    
-    if not audio_url and not audio_base64:
-        return {"error": "Must provide either 'audio_url' or 'audio_base64'"}
-    
-    # Get optional parameters
     language = job_input.get("language")
     task = job_input.get("task", "transcribe")
-    batch_size = job_input.get("batch_size", 16)
-    return_timestamps = job_input.get("return_timestamps", False)
+    batch_size = job_input.get("batch_size", 24)
     
-    # Load model
-    model = load_model()
+    if not audio_url and not audio_base64:
+        return {"error": "Either 'audio' (URL) or 'audio_base64' is required"}
     
-    # Get audio file
-    tmp_path = None
+    audio_path = None
     try:
+        # Get audio file
         if audio_url:
-            # Extract file extension from URL
-            ext = os.path.splitext(audio_url.split("?")[0])[1] or ".mp3"
-            tmp_path = download_file(audio_url, suffix=ext)
+            print(f"Downloading audio from: {audio_url}")
+            audio_path = download_audio(audio_url)
         else:
-            # Decode base64 audio
-            audio_data = base64.b64decode(audio_base64)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                tmp.write(audio_data)
-                tmp_path = tmp.name
+            print("Decoding base64 audio")
+            audio_path = decode_base64_audio(audio_base64)
         
-        # Transcribe with VAD (Voice Activity Detection)
-        result = model.transcribe_with_vad(
-            [tmp_path],
-            lang_codes=[language] if language else [None],
-            tasks=[task],
-            initial_prompts=[None],
-            batch_size=batch_size,
-        )
+        # Transcribe
+        print(f"Transcribing: {audio_path}")
+        result = transcribe_audio(audio_path, language, task, batch_size)
         
-        # Process results
-        segments = result[0] if result else []
+        return result
         
-        if return_timestamps:
-            # Return segments with timestamps
-            output_segments = []
-            for seg in segments:
-                output_segments.append({
-                    "text": seg.get("text", "").strip(),
-                    "start": seg.get("start_time", 0),
-                    "end": seg.get("end_time", 0)
-                })
-            full_text = " ".join(seg["text"] for seg in output_segments)
-            return {
-                "text": full_text,
-                "segments": output_segments
-            }
-        else:
-            # Return just the text
-            full_text = " ".join(seg.get("text", "").strip() for seg in segments)
-            return {"text": full_text}
-            
     except Exception as e:
         return {"error": str(e)}
     
     finally:
-        # Cleanup temp file
-        if tmp_path and os.path.exists(tmp_path):
+        # Cleanup
+        if audio_path and os.path.exists(audio_path):
             try:
-                os.remove(tmp_path)
+                os.remove(audio_path)
             except OSError:
                 pass
 
-# Initialize model at cold start
-print("Initializing WhisperS2T model...")
-load_model()
+
+# Pre-load model at startup for faster cold starts
+print("Initializing WhisperS2T model at startup...")
+try:
+    load_model()
+    print("Model pre-loaded successfully!")
+except Exception as e:
+    print(f"Warning: Model pre-load failed: {e}")
 
 # Start RunPod serverless handler
 runpod.serverless.start({"handler": handler})
