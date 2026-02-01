@@ -86,7 +86,7 @@ async def transcribe(
         # Transcribe with WhisperS2T VAD pipeline
         out = MODEL.transcribe_with_vad(
             [tmp_path],
-            lang_codes=[language] if language else [None],
+            lang_codes=[language] if language else ['en'],
             tasks=[task],
             initial_prompts=[None],
             batch_size=batch_size,
@@ -158,7 +158,7 @@ async def transcribe_url(
     try:
         out = MODEL.transcribe_with_vad(
             [tmp_path],
-            lang_codes=[language] if language else [None],
+            lang_codes=[language] if language else ['en'],
             tasks=[task],
             initial_prompts=[None],
             batch_size=batch_size,
@@ -205,7 +205,7 @@ async def transcribe_base64(
     try:
         out = MODEL.transcribe_with_vad(
             [tmp_path],
-            lang_codes=[language] if language else [None],
+            lang_codes=[language] if language else ['en'],
             tasks=[task],
             initial_prompts=[None],
             batch_size=batch_size,
