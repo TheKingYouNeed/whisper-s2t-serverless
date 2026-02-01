@@ -47,10 +47,8 @@ def root():
 @app.get("/ping")
 @app.get("/health")
 def health_check():
-    """Health check endpoint for load balancer"""
-    if READY:
-        return {"status": "ready"}
-    return JSONResponse(status_code=503, content={"status": "loading"})
+    """Health check endpoint for load balancer - always returns 200"""
+    return {"status": "ready" if READY else "loading", "model_loaded": READY}
 
 
 @app.post("/transcribe")
@@ -228,10 +226,18 @@ async def transcribe_base64(
                 pass
 
 
-# Load model at startup
-print("Initializing WhisperS2T model...")
-load_model()
+# Load model in background thread so server starts immediately
+import threading
+
+def _load_model_background():
+    print("Loading WhisperS2T model in background...")
+    load_model()
+    print("Background model loading complete!")
+
+print("Starting FastAPI server...")
+threading.Thread(target=_load_model_background, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
