@@ -1,9 +1,7 @@
 # WhisperS2T Load Balancing Serverless Dockerfile for RunPod
-# Simplified version for faster builds
+# Simplified version using PyPI package
 
 FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
-
-ARG WHISPER_S2T_VER=main
 
 WORKDIR /app
 SHELL ["/bin/bash", "-c"]
@@ -14,11 +12,10 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     libsndfile1 \
     ffmpeg \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install WhisperS2T (CTranslate2 backend - no TensorRT for simpler build)
-RUN pip3 install --no-cache-dir git+https://github.com/shashikg/WhisperS2T.git@${WHISPER_S2T_VER}
+# Install WhisperS2T from PyPI (more reliable than git install)
+RUN pip3 install --no-cache-dir whisper-s2t
 
 # Install FastAPI and dependencies for multipart upload support
 RUN pip3 install --no-cache-dir \
