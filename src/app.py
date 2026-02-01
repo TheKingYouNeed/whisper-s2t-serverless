@@ -89,7 +89,7 @@ async def transcribe(
     
     Args:
         file: Audio file (mp3, wav, m4a, flac, etc.)
-        model: Model to use (tiny, tiny.en, small, small.en, medium, medium.en, large-v2, large-v3)
+        model: Model to use (tiny, tiny.en, base, base.en, small, small.en, medium, large-v3)
         language: Language code (e.g., 'en', 'fr', 'de', 'es', 'zh') - default 'en'
         task: 'transcribe' or 'translate' (translate to English)
         output_format: 'json', 'text', 'srt', or 'vtt'
