@@ -22,13 +22,13 @@ MODELS = {}
 DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "large-v3")
 BACKEND = os.getenv("WHISPER_BACKEND", "CTranslate2")
 
-# Valid model names
+# Valid model names - MUST match models pre-downloaded in Dockerfile
 VALID_MODELS = [
     "tiny", "tiny.en", 
     "base", "base.en",
     "small", "small.en", 
-    "medium", "medium.en",
-    "large-v1", "large-v2", "large-v3"
+    "medium",
+    "large-v3"
 ]
 
 def get_model(model_name: str = None):
