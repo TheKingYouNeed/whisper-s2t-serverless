@@ -107,8 +107,13 @@ async def transcribe(
     
     # Save uploaded file to temp location
     suffix = os.path.splitext(file.filename or "audio.mp3")[1] or ".mp3"
+    content = await file.read()
+    
+    # Reject files > 100MB to prevent long processing
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file too large (max 100MB)")
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
     
@@ -235,12 +240,20 @@ async def transcribe_url(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Download audio
+    # Download audio with reasonable timeout
+    tmp_path = None
     try:
-        response = http_requests.get(audio_url, timeout=300)
+        response = http_requests.get(audio_url, timeout=60, stream=True)
         response.raise_for_status()
+    except http_requests.Timeout:
+        raise HTTPException(status_code=408, detail="Audio download timed out (60s limit)")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to download audio: {e}")
+    
+    # Check content length - reject files > 100MB to prevent long processing
+    content_length = response.headers.get('content-length')
+    if content_length and int(content_length) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file too large (max 100MB)")
     
     suffix = ".mp3"
     if "wav" in audio_url.lower():
@@ -249,7 +262,8 @@ async def transcribe_url(
         suffix = ".m4a"
     
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(response.content)
+        for chunk in response.iter_content(chunk_size=8192):
+            tmp.write(chunk)
         tmp_path = tmp.name
     
     try:
@@ -292,8 +306,11 @@ async def transcribe_url(
                 "language": language or "en",
             }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
     finally:
-        if os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
             except OSError:
@@ -329,10 +346,15 @@ async def transcribe_base64(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+    tmp_path = None
     try:
         audio_data = base64.b64decode(audio_base64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 audio data")
+    
+    # Reject files > 100MB to prevent long processing
+    if len(audio_data) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file too large (max 100MB)")
     
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         tmp.write(audio_data)
@@ -378,8 +400,11 @@ async def transcribe_base64(
                 "language": language or "en",
             }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
     finally:
-        if os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
             except OSError:
