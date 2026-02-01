@@ -1,12 +1,12 @@
 """
-WhisperS2T Load Balancing Handler for RunPod
-Supports multipart file uploads for RapidAPI integration
-Uses WhisperS2T with CTranslate2 backend for optimized performance
+WhisperS2T HTTP API Server for RunPod
+FastAPI server with multipart file upload support for RapidAPI integration
 """
 
 import os
 import tempfile
 import base64
+import requests as http_requests
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -38,10 +38,16 @@ def load_model():
     return MODEL
 
 
+@app.get("/")
+def root():
+    """Root endpoint"""
+    return {"service": "WhisperS2T Transcription API", "status": "ready" if READY else "loading"}
+
+
 @app.get("/ping")
 @app.get("/health")
 def health_check():
-    """Health check endpoint for RunPod Load Balancing"""
+    """Health check endpoint for load balancer"""
     if READY:
         return {"status": "ready"}
     return JSONResponse(status_code=503, content={"status": "loading"})
@@ -57,8 +63,10 @@ async def transcribe(
     """
     Transcribe audio file using WhisperS2T
     
+    Supports multipart/form-data file upload for RapidAPI integration
+    
     Args:
-        file: Audio file (multipart upload)
+        file: Audio file (mp3, wav, m4a, flac, etc.)
         language: Language code (e.g., 'en', 'fr') or None for auto-detect
         task: 'transcribe' or 'translate'
         batch_size: Batch size for VAD processing (default 24)
@@ -86,10 +94,9 @@ async def transcribe(
             batch_size=batch_size,
         )
         
-        # Process results - out[0] contains segments for first file
+        # Process results
         segments = out[0] if out else []
         
-        # Build response
         result_segments = []
         full_text_parts = []
         
@@ -119,6 +126,61 @@ async def transcribe(
                 pass
 
 
+@app.post("/transcribe_url")
+async def transcribe_url(
+    audio_url: str = Form(...),
+    language: Optional[str] = Form(default=None),
+    task: str = Form(default="transcribe"),
+    batch_size: int = Form(default=24),
+):
+    """
+    Transcribe audio from URL
+    Alternative endpoint for URL-based input
+    """
+    if not READY or MODEL is None:
+        raise HTTPException(status_code=503, detail="Model not ready")
+    
+    # Download audio
+    try:
+        response = http_requests.get(audio_url, timeout=300)
+        response.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to download audio: {e}")
+    
+    suffix = ".mp3"
+    if "wav" in audio_url.lower():
+        suffix = ".wav"
+    elif "m4a" in audio_url.lower():
+        suffix = ".m4a"
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(response.content)
+        tmp_path = tmp.name
+    
+    try:
+        out = MODEL.transcribe_with_vad(
+            [tmp_path],
+            lang_codes=[language] if language else [None],
+            tasks=[task],
+            initial_prompts=[None],
+            batch_size=batch_size,
+        )
+        
+        segments = out[0] if out else []
+        full_text_parts = [seg.get("text", "").strip() for seg in segments]
+        
+        return {
+            "text": " ".join(full_text_parts),
+        }
+        
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
 @app.post("/transcribe_base64")
 async def transcribe_base64(
     audio_base64: str = Form(...),
@@ -127,8 +189,8 @@ async def transcribe_base64(
     batch_size: int = Form(default=24),
 ):
     """
-    Transcribe base64-encoded audio using WhisperS2T
-    Alternative endpoint for clients that prefer base64
+    Transcribe base64-encoded audio
+    Alternative endpoint for base64 input
     """
     if not READY or MODEL is None:
         raise HTTPException(status_code=503, detail="Model not ready")
