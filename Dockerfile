@@ -31,19 +31,14 @@ ENV WHISPER_MODEL=large-v3
 ENV WHISPER_BACKEND=CTranslate2
 ENV PORT=8000
 
-# Pre-download ALL models for instant loading at runtime
-# This adds ~10GB to image but ensures no download delays
+# Pre-download key models for instant loading at runtime
+# Reduced set to fit GitHub Actions disk limits (~14GB)
+# tiny (~75MB), small (~500MB), medium (~1.5GB), large-v3 (~3GB)
 RUN python3 -c "\
 import whisper_s2t; \
 print('Downloading tiny...'); whisper_s2t.load_model('tiny', backend='CTranslate2'); \
-print('Downloading tiny.en...'); whisper_s2t.load_model('tiny.en', backend='CTranslate2'); \
-print('Downloading base...'); whisper_s2t.load_model('base', backend='CTranslate2'); \
-print('Downloading base.en...'); whisper_s2t.load_model('base.en', backend='CTranslate2'); \
 print('Downloading small...'); whisper_s2t.load_model('small', backend='CTranslate2'); \
-print('Downloading small.en...'); whisper_s2t.load_model('small.en', backend='CTranslate2'); \
 print('Downloading medium...'); whisper_s2t.load_model('medium', backend='CTranslate2'); \
-print('Downloading medium.en...'); whisper_s2t.load_model('medium.en', backend='CTranslate2'); \
-print('Downloading large-v2...'); whisper_s2t.load_model('large-v2', backend='CTranslate2'); \
 print('Downloading large-v3...'); whisper_s2t.load_model('large-v3', backend='CTranslate2'); \
 print('All models downloaded!'); \
 "
