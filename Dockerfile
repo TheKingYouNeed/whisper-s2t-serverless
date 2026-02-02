@@ -32,18 +32,8 @@ ENV WHISPER_BACKEND=CTranslate2
 ENV PORT=8000
 
 # Pre-download CTranslate2 model files (no CUDA needed for download)
-# Using huggingface_hub to download without initializing GPU
-RUN pip3 install --no-cache-dir huggingface_hub && \
-    python3 -c "\
-from huggingface_hub import snapshot_download; \
-import os; \
-models = ['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'large-v3']; \
-for i, m in enumerate(models, 1): \
-    print(f'{i}/{len(models)} Downloading {m}...'); \
-    repo = f'Systran/faster-whisper-{m}'; \
-    snapshot_download(repo_id=repo, local_dir=f'/root/.cache/huggingface/hub/models--Systran--faster-whisper-{m}/snapshots/main'); \
-print('All models downloaded!'); \
-"
+COPY src/download_models.py /app/download_models.py
+RUN pip3 install --no-cache-dir huggingface_hub && python3 /app/download_models.py
 
 # Expose HTTP port
 EXPOSE 8000
