@@ -411,19 +411,8 @@ async def transcribe_base64(
                 pass
 
 
-# Pre-load default model in background for faster first request
-import threading
-
-def _preload_default_model():
-    print(f"Pre-loading default model: {DEFAULT_MODEL}...")
-    try:
-        get_model(DEFAULT_MODEL)
-        print(f"Default model {DEFAULT_MODEL} pre-loaded!")
-    except Exception as e:
-        print(f"Warning: Failed to pre-load model: {e}")
-
-print("Starting FastAPI server...")
-threading.Thread(target=_preload_default_model, daemon=True).start()
+# Models are pre-downloaded in Docker image - load on-demand to minimize startup time
+print("FastAPI server ready. Models will load on first request.")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
