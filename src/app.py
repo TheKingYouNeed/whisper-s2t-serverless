@@ -411,8 +411,24 @@ async def transcribe_base64(
                 pass
 
 
-# Models are pre-downloaded in Docker image - load on-demand to minimize startup time
-print("FastAPI server ready. Models will load on first request.")
+# Preload ALL models at startup for instant model switching (no reload overhead)
+import time
+
+def preload_all_models():
+    """Load all models into VRAM at startup for zero-overhead model switching"""
+    print(f"Preloading ALL {len(VALID_MODELS)} models into memory...")
+    start_time = time.time()
+    for i, model in enumerate(VALID_MODELS, 1):
+        print(f"  [{i}/{len(VALID_MODELS)}] Loading {model}...")
+        try:
+            get_model(model)
+        except Exception as e:
+            print(f"  Warning: Failed to load {model}: {e}")
+    elapsed = time.time() - start_time
+    print(f"All models preloaded in {elapsed:.1f}s. Ready for instant inference!")
+
+# Preload all models at startup
+preload_all_models()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
