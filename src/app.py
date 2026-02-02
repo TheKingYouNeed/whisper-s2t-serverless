@@ -9,7 +9,7 @@ import base64
 import requests as http_requests
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -216,7 +216,8 @@ def _format_timestamp_vtt(seconds):
 
 @app.post("/transcribe_url")
 async def transcribe_url(
-    audio_url: str = Form(...),
+    audio_url: Optional[str] = Query(default=None, description="URL to audio file"),
+    audio_url_body: Optional[str] = Form(default=None, alias="audio_url"),
     model: Optional[str] = Form(default=None),
     whisper_model: Optional[str] = Form(default=None),
     language: Optional[str] = Form(default=None),
@@ -224,7 +225,7 @@ async def transcribe_url(
     output_format: str = Form(default="json"),
     word_timestamps: bool = Form(default=False),
     initial_prompt: Optional[str] = Form(default=None),
-    batch_size: int = Form(default=24),
+    batch_size: int = Form(default=32),
 ):
     """
     Transcribe audio from URL
@@ -239,6 +240,11 @@ async def transcribe_url(
         initial_prompt: Context hints for accuracy
         batch_size: VAD batch size
     """
+    # Support audio_url from query param OR body for RapidAPI visibility
+    final_audio_url = audio_url or audio_url_body
+    if not final_audio_url:
+        raise HTTPException(status_code=400, detail="audio_url is required (in query or body)")
+    
     # Support both 'model' and 'whisper_model' parameters (RapidAPI compatibility)
     selected_model = whisper_model or model
     
@@ -250,7 +256,7 @@ async def transcribe_url(
     # Download audio with reasonable timeout
     tmp_path = None
     try:
-        response = http_requests.get(audio_url, timeout=60, stream=True)
+        response = http_requests.get(final_audio_url, timeout=60, stream=True)
         response.raise_for_status()
     except http_requests.Timeout:
         raise HTTPException(status_code=408, detail="Audio download timed out (60s limit)")
@@ -263,9 +269,9 @@ async def transcribe_url(
         raise HTTPException(status_code=413, detail="Audio file too large (max 100MB)")
     
     suffix = ".mp3"
-    if "wav" in audio_url.lower():
+    if "wav" in final_audio_url.lower():
         suffix = ".wav"
-    elif "m4a" in audio_url.lower():
+    elif "m4a" in final_audio_url.lower():
         suffix = ".m4a"
     
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
