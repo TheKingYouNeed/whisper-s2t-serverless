@@ -19,7 +19,7 @@ app = FastAPI(title="WhisperS2T Transcription API")
 
 # Model cache - supports multiple models
 MODELS = {}
-DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "large-v3")
+DEFAULT_MODEL = os.getenv("WHISPER_MODEL", "tiny")
 BACKEND = os.getenv("WHISPER_BACKEND", "CTranslate2")
 
 # Valid model names - MUST match models pre-downloaded in Dockerfile
@@ -74,6 +74,7 @@ def health_check():
 async def transcribe(
     file: UploadFile = File(...),
     model: Optional[str] = Form(default=None),
+    whisper_model: Optional[str] = Form(default=None),
     language: Optional[str] = Form(default=None),
     task: str = Form(default="transcribe"),
     output_format: str = Form(default="json"),
@@ -99,8 +100,11 @@ async def transcribe(
     Returns:
         Transcription in requested format
     """
+    # Support both 'model' and 'whisper_model' parameters (RapidAPI compatibility)
+    selected_model = whisper_model or model
+    
     try:
-        whisper_model = get_model(model)
+        loaded_model = get_model(selected_model)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
@@ -118,7 +122,7 @@ async def transcribe(
     
     try:
         # Transcribe with WhisperS2T VAD pipeline
-        out = whisper_model.transcribe_with_vad(
+        out = loaded_model.transcribe_with_vad(
             [tmp_path],
             lang_codes=[language] if language else ['en'],
             tasks=[task],
@@ -156,7 +160,7 @@ async def transcribe(
             return {
                 "text": full_text,
                 "segments": result_segments,
-                "model": model or DEFAULT_MODEL,
+                "model": selected_model or DEFAULT_MODEL,
                 "language": language or "en",
             }
         
@@ -214,6 +218,7 @@ def _format_timestamp_vtt(seconds):
 async def transcribe_url(
     audio_url: str = Form(...),
     model: Optional[str] = Form(default=None),
+    whisper_model: Optional[str] = Form(default=None),
     language: Optional[str] = Form(default=None),
     task: str = Form(default="transcribe"),
     output_format: str = Form(default="json"),
@@ -234,8 +239,11 @@ async def transcribe_url(
         initial_prompt: Context hints for accuracy
         batch_size: VAD batch size
     """
+    # Support both 'model' and 'whisper_model' parameters (RapidAPI compatibility)
+    selected_model = whisper_model or model
+    
     try:
-        whisper_model = get_model(model)
+        loaded_model = get_model(selected_model)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
@@ -266,7 +274,7 @@ async def transcribe_url(
         tmp_path = tmp.name
     
     try:
-        out = whisper_model.transcribe_with_vad(
+        out = loaded_model.transcribe_with_vad(
             [tmp_path],
             lang_codes=[language] if language else ['en'],
             tasks=[task],
@@ -301,7 +309,7 @@ async def transcribe_url(
             return {
                 "text": full_text,
                 "segments": result_segments,
-                "model": model or DEFAULT_MODEL,
+                "model": selected_model or DEFAULT_MODEL,
                 "language": language or "en",
             }
         
