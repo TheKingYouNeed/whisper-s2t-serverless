@@ -11,8 +11,8 @@ headers = {"Authorization": f"Bearer {API_KEY}"}
 # Sample audio URL
 audio_url = "https://github.com/runpod-workers/sample-inputs/raw/main/audio/gettysburg.wav"
 
-# All 8 models available in the new image
-MODELS = ['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'large-v3']
+# 4 models available in the image
+MODELS = ['tiny', 'tiny.en', 'small', 'large-v3']
 
 print("=" * 70)
 print("Testing ALL Whisper models on RunPod endpoint")
