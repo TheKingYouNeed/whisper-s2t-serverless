@@ -80,7 +80,7 @@ async def transcribe(
     output_format: str = Form(default="json"),
     word_timestamps: bool = Form(default=False),
     initial_prompt: Optional[str] = Form(default=None),
-    batch_size: int = Form(default=24),
+    batch_size: int = Form(default=32),
 ):
     """
     Transcribe audio file using WhisperS2T
