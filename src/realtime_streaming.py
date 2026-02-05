@@ -27,18 +27,18 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 # =============================================================================
 # VERTICAL SCALING CONFIGURATION
-# Tune these based on your GPU VRAM and CPU cores
+# Tuned for 100x real-time GPU (RTX 3080 Ti / RTX 4080 class)
 # =============================================================================
 
 # Connection limits (per process)
-MAX_CONCURRENT_CONNECTIONS = 2000     # WebSocket connections (CPU bound)
+MAX_CONCURRENT_CONNECTIONS = 5000     # WebSocket connections (CPU bound)
 CONNECTION_TIMEOUT_SECONDS = 300      # 5 min idle timeout
 
-# GPU Processing (most important for vertical scaling)
-GPU_BATCH_SIZE = 8                    # Transcriptions batched together
-GPU_BATCH_TIMEOUT_MS = 100            # Max wait to form batch (ms)
-GPU_THREAD_POOL_SIZE = 4              # Threads for GPU work
-MAX_CONCURRENT_GPU_BATCHES = 2        # Parallel GPU batches
+# GPU Processing - AGGRESSIVE for 100x real-time GPU
+GPU_BATCH_SIZE = 32                   # Process 32 transcriptions per GPU call
+GPU_BATCH_TIMEOUT_MS = 50             # Faster batching (50ms)
+GPU_THREAD_POOL_SIZE = 8              # More threads for GPU work
+MAX_CONCURRENT_GPU_BATCHES = 4        # 4 parallel GPU batches = 128 concurrent
 
 # Memory limits
 MAX_AUDIO_BUFFER_BYTES = 5 * 1024 * 1024  # 5MB per session
