@@ -21,10 +21,13 @@ RUN pip3 install --no-cache-dir \
     fastapi>=0.100.0 \
     uvicorn[standard]>=0.23.0 \
     python-multipart>=0.0.6 \
-    requests
+    requests \
+    websockets \
+    aiofiles
 
-# Copy FastAPI application
+# Copy FastAPI application and realtime streaming module
 COPY src/app.py /app/app.py
+COPY src/realtime_streaming.py /app/realtime_streaming.py
 
 # Environment variables
 ENV WHISPER_MODEL=large-v3

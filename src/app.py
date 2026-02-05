@@ -9,7 +9,7 @@ import base64
 import requests as http_requests
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, WebSocket
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -442,6 +442,14 @@ def preload_all_models():
 
 # Preload all models at startup
 preload_all_models()
+
+# Register WebSocket routes for real-time streaming
+try:
+    from realtime_streaming import register_websocket_routes
+    register_websocket_routes(app, get_model)
+    print("Real-time WebSocket streaming enabled at /ws/transcribe")
+except ImportError as e:
+    print(f"WebSocket streaming not available: {e}")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
